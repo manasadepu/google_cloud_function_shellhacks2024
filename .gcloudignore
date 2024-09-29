@@ -1,0 +1,20 @@
+# .gcloudignore file
+# Ignore the virtual environment
+myenv/
+env/
+.env/
+.python-version
+
+# Ignore any compiled Python files
+*.pyc
+__pycache__/
+
+# Ignore other unwanted files
+.DS_Store
+.idea/
+.vscode/
+
+automatic-hawk-437002-u3-6d369553f0e5.json
+gpt_routes.py
+google_api_routes.py
+helper_functions.py
