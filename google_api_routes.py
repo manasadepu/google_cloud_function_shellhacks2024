@@ -105,27 +105,66 @@ def extract_ingredients(text):
 
     return []
 
-# Combined endpoint for both nutrition and ingredient OCR
+# Web detection for food product recognition
+def detect_web(image_path):
+    client = vision.ImageAnnotatorClient()
+
+    with io.open(image_path, 'rb') as image_file:
+        content = image_file.read()
+
+    image = vision.Image(content=content)
+    response = client.web_detection(image=image)
+    annotations = response.web_detection
+
+    web_entities = []
+    visually_similar_images = []
+
+    if annotations.web_entities:
+        for entity in annotations.web_entities:
+            web_entities.append({
+                "description": entity.description,
+                "score": entity.score
+            })
+
+    if annotations.visually_similar_images:
+        for image in annotations.visually_similar_images:
+            visually_similar_images.append(image.url)
+
+    if response.error.message:
+        raise Exception(f'{response.error.message}')
+
+    return {
+        "web_entities": web_entities,
+        "visually_similar_images": visually_similar_images
+    }
+
+# Combined endpoint for both nutrition, ingredient OCR, and product recognition
 def google_api_routes(app):
 
-    @app.route('/perform_nutrition_and_ingredient_OCR', methods=['POST'])
-    def perform_nutrition_and_ingredient_OCR():
-        if 'nutrition_file' not in request.files or 'ingredient_file' not in request.files:
-            return jsonify({'error': 'Nutrition file or Ingredient file part is missing in the request'}), 400
+    @app.route('/perform_nutrition_ingredient_and_product_OCR', methods=['POST'])
+    def perform_nutrition_ingredient_and_product_OCR():
+        if 'nutrition_file' not in request.files or 'ingredient_file' not in request.files or 'product_file' not in request.files:
+            return jsonify({'error': 'Nutrition, Ingredient, or Product file part is missing in the request'}), 400
 
         nutrition_file = request.files['nutrition_file']
         ingredient_file = request.files['ingredient_file']
+        product_file = request.files['product_file']
 
-        if nutrition_file.filename == '' or ingredient_file.filename == '':
-            return jsonify({'error': 'No selected file for either nutrition or ingredient OCR'}), 400
+        if nutrition_file.filename == '' or ingredient_file.filename == '' or product_file.filename == '':
+            return jsonify({'error': 'No selected file for either nutrition, ingredient, or product OCR'}), 400
+
+        # Define file paths
+        current_dir = os.getcwd()
+        nutrition_file_path = os.path.join(current_dir, secure_filename(nutrition_file.filename))
+        ingredient_file_path = os.path.join(current_dir, secure_filename(ingredient_file.filename))
+        product_file_path = os.path.join(current_dir, secure_filename(product_file.filename))
+        processed_image_path = None
 
         try:
             # Save files locally
-            current_dir = os.getcwd()
-            nutrition_file_path = os.path.join(current_dir, secure_filename(nutrition_file.filename))
-            ingredient_file_path = os.path.join(current_dir, secure_filename(ingredient_file.filename))
             nutrition_file.save(nutrition_file_path)
             ingredient_file.save(ingredient_file_path)
+            product_file.save(product_file_path)
 
             # Perform nutrition data extraction
             nutrition_data = nutrition_data_extraction(nutrition_file_path)
@@ -137,14 +176,33 @@ def google_api_routes(app):
             # Extract ingredients from OCR text
             ingredients = extract_ingredients(ocr_text)
 
+            # Perform product recognition using web detection
+            product_recognition_result = detect_web(product_file_path)
+
             # Return combined response
             return jsonify({
                 'nutrition_data': nutrition_data,
                 'ingredient_data': {
-                    'ocr_text': ocr_text,
                     'ingredients': ingredients
-                }
+                },
+                'product_recognition': product_recognition_result
             }), 200
 
         except Exception as e:
             return jsonify({'error': str(e)}), 500
+
+        finally:
+            # Ensure that all saved files are deleted after processing
+            try:
+                if os.path.exists(nutrition_file_path):
+                    os.remove(nutrition_file_path)
+                if os.path.exists(ingredient_file_path):
+                    os.remove(ingredient_file_path)
+                if os.path.exists(product_file_path):
+                    os.remove(product_file_path)
+                if processed_image_path and os.path.exists(processed_image_path):
+                    os.remove(processed_image_path)
+            except Exception as cleanup_error:
+                # Optionally log the cleanup error
+                print(f"Error cleaning up files: {cleanup_error}")
+

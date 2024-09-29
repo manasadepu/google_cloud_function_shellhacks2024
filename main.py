@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 import openai
 import json, os
 #from gpt_routes import gpt_routes
-#from google_api_routes import google_api_routes
+from google_api_routes import google_api_routes
 
 app = Flask(__name__)
 load_dotenv()
@@ -152,7 +152,9 @@ def get_ingredient_info():
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+google_api_routes(app)
 
     
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
